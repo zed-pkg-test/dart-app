@@ -1,0 +1,13 @@
+name: dart_app
+version: 0.1.0
+description: Consumes zed-pkg-test/dart-lib via zed while pub owns the rest.
+publish_to: none
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+# zed writes the path entry for the zed-sourced package into
+# .zed/pub-deps.yaml; it is merged in here. Ordinary pub.dev deps sit alongside.
+dependencies:
+  zed_pkg_test_dart_lib:
+    path: .vendor/.zed/zed-pkg-test/dart-lib

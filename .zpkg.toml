@@ -1,0 +1,21 @@
+[package]
+org = "zed-pkg-test"
+name = "dart-app"
+version = "0.1.0"
+description = "A Dart app sourcing one package via zed and the rest via pub."
+license = "MIT"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/zed-pkg-test/dart-app"
+
+# pub has no environment-variable path override, so `zed install` cannot wire
+# this up by itself: it writes .zed/pub-deps.yaml and the entries get merged
+# under `dependencies:` in pubspec.yaml. That manual step is the point of this
+# fixture -- it is the one adapter that cannot be zero-touch.
+[install]
+dir = ".vendor/.zed"
+adapter = "dart"
+
+[dependencies]
+"zed-pkg-test/dart-lib" = "^1.0.0"

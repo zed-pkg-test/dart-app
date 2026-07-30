@@ -1,0 +1,5 @@
+.zed/
+.dart_tool/
+.vendor/
+.zpkg.lock
+pubspec.lock
