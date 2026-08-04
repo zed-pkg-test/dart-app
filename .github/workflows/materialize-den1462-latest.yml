@@ -1,0 +1,88 @@
+name: materialize hardened DEN-1462
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/materialize-den1462-latest.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: materialize-den1462-latest-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: zed-pkg/zed-cli
+          ref: 3afd407d8e923d15918850af510963e19cf6c805
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+          show-progress: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+      - name: Materialize and validate
+        working-directory: source
+        run: |
+          set -euo pipefail
+          python3 scripts/apply_den1462_mise_export.py
+          cargo fmt --all
+          cargo fmt --all --check
+          git diff --check
+          cargo test --locked mise_export
+          cargo test --locked --test mise_export_cli
+          cargo test --locked cli::tests::environment_export_is_typed_and_rejects_ambiguous_write_modes
+          cargo test --locked cli::tests::cli_flags_toml_is_in_sync_with_clap
+          cargo clippy --locked --all-targets -- -D warnings
+          rm -f .github/workflows/apply-den-1462-mise-export.yml scripts/apply_den1462_mise_export.py
+      - name: Package validated delta
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil, subprocess, tarfile
+          source = Path('source')
+          stage = Path('/tmp/den1462-materialized')
+          shutil.rmtree(stage, ignore_errors=True)
+          stage.mkdir(parents=True)
+          def lines(*args):
+              out = subprocess.check_output(['git','-C',str(source),*args], text=True)
+              return [line for line in out.splitlines() if line]
+          changed = set(lines('diff','--name-only','--diff-filter=ACMRTUXB','HEAD'))
+          changed.update(lines('ls-files','--others','--exclude-standard'))
+          deleted = sorted(set(lines('diff','--name-only','--diff-filter=D','HEAD')))
+          changed = sorted(changed)
+          for rel in changed:
+              src = source / rel
+              if not src.is_file(): raise SystemExit(f'not a regular file: {rel}')
+              dst = stage / 'files' / rel
+              dst.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(src, dst)
+          (stage/'base-sha.txt').write_text(subprocess.check_output(['git','-C',str(source),'rev-parse','HEAD'], text=True))
+          (stage/'changed-files.txt').write_text('\n'.join(changed) + ('\n' if changed else ''))
+          (stage/'deleted-files.txt').write_text('\n'.join(deleted) + ('\n' if deleted else ''))
+          with tarfile.open('/tmp/den1462-materialized.tar.gz','w:gz') as archive:
+              archive.add(stage, arcname='den1462-materialized')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: den1462-materialized-latest
+          path: /tmp/den1462-materialized.tar.gz
+          if-no-files-found: error
+          retention-days: 7
