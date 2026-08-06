@@ -3,3 +3,7 @@
 .vendor/
 .zpkg.lock
 pubspec.lock
+tmp
+temp
+tmp/worktrees
+temp/worktrees
